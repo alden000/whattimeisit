@@ -1,0 +1,1018 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What Time Is It</title>
+<meta name="description" content="A quiet, beautiful clock for your second screen — with alarms and chimes.">
+<meta name="theme-color" content="#0a0a0c">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0c'/%3E%3Crect x='10' y='38' width='44' height='16' rx='3' fill='%237ee0c3' opacity='.55'/%3E%3Ccircle cx='32' cy='26' r='5' fill='%23ece8e1'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+@property --accent { syntax: '<color>'; inherits: true; initial-value: #7ee0c3; }
+
+:root {
+  --bg: #0a0a0c;
+  --ink: #ece8e1;
+  --mute: rgba(236, 232, 225, .42);
+  --faint: rgba(236, 232, 225, .16);
+  --line: rgba(236, 232, 225, .10);
+  --panel: rgba(18, 18, 22, .86);
+  --accent: #7ee0c3;
+  --minute: color-mix(in oklab, var(--accent) 80%, var(--ink));
+  --display: 'Big Shoulders Display', 'Bahnschrift', 'Arial Narrow', sans-serif-condensed, sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --ease-out: cubic-bezier(.16, 1, .3, 1);
+  --ease-in: cubic-bezier(.7, 0, .84, 0);
+  color-scheme: dark;
+  transition: --accent 4s linear;
+}
+:root[data-theme="light"] {
+  --bg: #eeebe4;
+  --ink: #141416;
+  --mute: rgba(20, 20, 22, .5);
+  --faint: rgba(20, 20, 22, .18);
+  --line: rgba(20, 20, 22, .10);
+  --panel: rgba(244, 242, 237, .9);
+  --minute: color-mix(in oklab, var(--accent) 55%, var(--ink));
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--mono);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 1.2s ease, color 1.2s ease;
+  user-select: none;
+}
+body.idle { cursor: none; }
+button { font: inherit; color: inherit; background: none; border: 0; cursor: pointer; padding: 0; }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px solid var(--accent); outline-offset: 3px; }
+
+/* ---------- background layers ---------- */
+#tide { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.grain {
+  position: fixed; inset: -50%; pointer-events: none; opacity: .07; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+.vignette {
+  position: fixed; inset: 0; pointer-events: none;
+  background: radial-gradient(120% 80% at 50% 40%, transparent 55%, color-mix(in srgb, var(--bg) 70%, transparent) 100%);
+}
+.edge {
+  position: fixed; inset: 0; pointer-events: none; opacity: 0;
+  box-shadow: inset 0 0 0 1px var(--accent), inset 0 0 120px -20px var(--accent);
+}
+.edge.flash { animation: edge 2.6s var(--ease-out); }
+@keyframes edge { 0% { opacity: 0 } 12% { opacity: .9 } 100% { opacity: 0 } }
+
+/* day ruler (left) + seconds rail (right) */
+.ruler, .rail { position: fixed; top: 0; bottom: 0; width: 26px; pointer-events: none; }
+.ruler { left: 0; }
+.ruler i { position: absolute; left: 0; height: 1px; width: 6px; background: var(--faint); transform: translateY(50%); }
+.ruler i.major { width: 12px; background: var(--mute); }
+.ruler b {
+  position: absolute; left: 16px; transform: translateY(50%);
+  font: 500 9px/1 var(--mono); letter-spacing: .1em; color: var(--mute);
+}
+.rail { right: 0; }
+.rail::before { content: ''; position: absolute; right: 12px; top: 0; bottom: 0; width: 1px; background: var(--line); }
+.rail i {
+  position: absolute; right: 12px; top: 0; width: 1px; height: 100%;
+  background: linear-gradient(to bottom, transparent, var(--accent));
+  transform-origin: top; transform: scaleY(0);
+}
+.rail i::after {
+  content: ''; position: absolute; right: -2px; bottom: -2px; width: 5px; height: 5px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 0 12px 2px var(--accent);
+  transform: scaleX(1);
+}
+body.no-seconds .rail i { opacity: 0; }
+
+/* ---------- stage ---------- */
+#stage {
+  position: fixed; inset: 0;
+  display: grid; grid-template-rows: auto 1fr auto;
+  padding: clamp(20px, 4.5vh, 44px) clamp(36px, 8vw, 64px);
+  transform: translate(var(--dx, 0px), var(--dy, 0px));
+  transition: transform 20s ease-in-out;
+}
+header {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+  font-size: clamp(10px, 1.9vw, 12px); letter-spacing: .24em; text-transform: uppercase; color: var(--mute);
+  white-space: nowrap;
+}
+header .place { display: flex; align-items: center; gap: 10px; color: var(--ink); min-width: 0; }
+header .place span { overflow: hidden; text-overflow: ellipsis; }
+header .live {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none;
+  box-shadow: 0 0 0 0 var(--accent); animation: live 2s ease-out infinite;
+}
+@keyframes live { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent) } 100% { box-shadow: 0 0 0 10px transparent } }
+header .date { text-align: right; }
+header .date small { display: block; margin-top: 6px; font-size: .9em; opacity: .7; letter-spacing: .2em; }
+
+.clock {
+  align-self: center; justify-self: center;
+  display: flex; flex-direction: column; align-items: center;
+  font-family: var(--display); font-weight: 800;
+  font-size: min(62vw, 33vh);
+  line-height: 1; letter-spacing: -.005em;
+  font-variant-numeric: tabular-nums;
+  cursor: default;
+}
+.row { display: flex; }
+.d { position: relative; display: block; height: .9em; }
+.d::before { content: '0'; visibility: hidden; display: block; line-height: .9em; padding: 0 .015em; }
+.d[hidden] { display: none; }
+.d span {
+  position: absolute; inset: 0; text-align: center; line-height: .9em;
+  will-change: transform, filter, opacity;
+}
+.d span.in { animation: rise 1.05s var(--ease-out) both; }
+.d span.out { animation: leave .55s var(--ease-in) both; }
+@keyframes rise {
+  0% { transform: translateY(.34em) scaleY(1.18); filter: blur(16px); opacity: 0; }
+  100% { transform: none; filter: blur(0); opacity: 1; }
+}
+@keyframes leave {
+  100% { transform: translateY(-.3em) scaleY(.86); filter: blur(16px); opacity: 0; }
+}
+#hh { color: var(--ink); }
+#mm { color: var(--minute); }
+.sep { display: flex; align-items: center; gap: .6em; height: .14em; font-size: 1rem; }
+.sep i { display: block; width: clamp(18px, 6vw, 40px); height: 1px; background: var(--faint); }
+.sep b { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: beat 1s steps(1) infinite; }
+@keyframes beat { 0% { opacity: 1 } 50% { opacity: .15 } }
+.meta {
+  display: flex; gap: 14px; align-items: baseline; margin-top: clamp(8px, 2vh, 20px);
+  font: 500 clamp(12px, 2.4vw, 15px)/1 var(--mono); letter-spacing: .2em; color: var(--mute);
+}
+.meta #ss { color: var(--accent); min-width: 2ch; }
+body.no-seconds .meta #ss, body.no-seconds .meta .dot { display: none; }
+.meta .dot { opacity: .5; }
+.meta:empty { display: none; }
+
+footer { display: grid; gap: 14px; justify-items: center; }
+.next {
+  display: flex; align-items: center; gap: 10px; max-width: 100%;
+  font-size: clamp(10px, 2vw, 12px); letter-spacing: .14em; text-transform: uppercase; color: var(--mute);
+  white-space: nowrap; transition: opacity .6s;
+}
+.next:empty { display: none; }
+.next svg { flex: none; color: var(--accent); }
+.next b { color: var(--ink); font-weight: 500; }
+.next span { overflow: hidden; text-overflow: ellipsis; }
+.hint {
+  font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--accent);
+  padding: 6px 12px; border: 1px dashed color-mix(in srgb, var(--accent) 50%, transparent); border-radius: 99px;
+}
+.hint[hidden] { display: none; }
+.tools { display: flex; gap: 6px; transition: opacity .8s ease, transform .8s var(--ease-out); }
+body.idle .tools { opacity: 0; transform: translateY(8px); pointer-events: none; }
+.tool {
+  width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; color: var(--mute);
+  border: 1px solid transparent; transition: color .3s, border-color .3s, background-color .3s;
+}
+.tool:hover { color: var(--ink); border-color: var(--line); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.tool .count {
+  position: absolute; transform: translate(11px, -11px); min-width: 15px; height: 15px; border-radius: 8px; padding: 0 4px;
+  background: var(--accent); color: var(--bg); font-size: 9px; line-height: 15px; font-weight: 500;
+}
+.tool { position: relative; }
+.tool .count:empty { display: none; }
+
+/* intro */
+body.intro header, body.intro footer, body.intro .ruler, body.intro .rail { opacity: 0; }
+header, footer, .ruler, .rail { transition: opacity 1.4s ease .6s; }
+
+/* ---------- sheet ---------- */
+.scrim {
+  position: fixed; inset: 0; background: color-mix(in srgb, var(--bg) 55%, transparent);
+  opacity: 0; pointer-events: none; transition: opacity .5s ease;
+}
+.sheet {
+  position: fixed; left: 50%; bottom: 0; width: min(100%, 560px); max-height: 88vh;
+  display: flex; flex-direction: column;
+  background: var(--panel); -webkit-backdrop-filter: blur(28px) saturate(1.2); backdrop-filter: blur(28px) saturate(1.2);
+  border: 1px solid var(--line); border-bottom: 0; border-radius: 24px 24px 0 0;
+  transform: translate(-50%, 104%); transition: transform .7s var(--ease-out);
+  user-select: text;
+}
+body.open .scrim { opacity: 1; pointer-events: auto; }
+body.open .sheet { transform: translate(-50%, 0); }
+.sheet-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 18px 22px 0;
+}
+.grab { position: absolute; left: 50%; top: 8px; width: 36px; height: 4px; border-radius: 2px; background: var(--faint); transform: translateX(-50%); }
+.tabs { display: flex; gap: 4px; padding: 4px; border-radius: 99px; background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tabs button {
+  padding: 8px 16px; border-radius: 99px; font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--mute);
+  transition: background-color .3s, color .3s;
+}
+.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+.close { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; color: var(--mute); }
+.close:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.sheet-body { overflow-y: auto; padding: 18px 22px 28px; overscroll-behavior: contain; }
+.pane[hidden] { display: none; }
+.label { font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--mute); margin: 22px 0 10px; }
+.label:first-child { margin-top: 4px; }
+
+.quick { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.chip {
+  padding: 10px 0; border-radius: 12px; border: 1px solid var(--line); font-size: 12px; letter-spacing: .06em; text-align: center;
+  transition: border-color .25s, background-color .25s, color .25s;
+}
+.chip:hover { border-color: var(--faint); background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #0a0a0c; }
+
+.compose { display: grid; gap: 10px; }
+.compose .top { display: grid; grid-template-columns: auto 1fr; gap: 10px; align-items: stretch; }
+input[type="time"], input[type="text"], select {
+  font: inherit; color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, transparent);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-width: 0; width: 100%;
+}
+input[type="time"] { font-family: var(--display); font-weight: 700; font-size: 34px; letter-spacing: .02em; padding: 4px 12px; width: auto; }
+input::placeholder { color: var(--mute); }
+.days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+.days .chip { padding: 8px 0; font-size: 11px; }
+.compose .row2 { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; }
+.btn {
+  padding: 11px 18px; border-radius: 12px; font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+  border: 1px solid var(--line); transition: background-color .25s, border-color .25s;
+}
+.btn:hover { border-color: var(--faint); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover { background: var(--accent); border-color: var(--accent); color: #0a0a0c; }
+
+.list { display: grid; gap: 2px; }
+.empty { color: var(--mute); font-size: 12px; padding: 16px 0; line-height: 1.6; }
+.item {
+  display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--line);
+  animation: pop .5s var(--ease-out) both;
+}
+@keyframes pop { from { opacity: 0; transform: translateY(8px) } }
+.item .t { font-family: var(--display); font-weight: 700; font-size: 30px; line-height: 1; letter-spacing: .01em; cursor: pointer; }
+.item .t small { display: block; font-family: var(--mono); font-weight: 400; font-size: 10px; letter-spacing: .16em; text-transform: uppercase; color: var(--mute); margin-top: 6px; }
+.item.off .t { opacity: .38; }
+.del { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: var(--mute); }
+.del:hover { color: #ff6b6b; background: color-mix(in srgb, #ff6b6b 10%, transparent); }
+
+.switch { width: 42px; height: 24px; border-radius: 99px; background: var(--faint); position: relative; transition: background-color .3s; flex: none; }
+.switch::after {
+  content: ''; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--ink); transition: transform .4s var(--ease-out), background-color .3s;
+}
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(18px); background: #0a0a0c; }
+
+.setting { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.setting small { display: block; color: var(--mute); font-size: 11px; margin-top: 4px; line-height: 1.5; }
+.seg { display: flex; gap: 3px; padding: 3px; border-radius: 12px; background: color-mix(in srgb, var(--ink) 5%, transparent); flex: none; }
+.seg button { padding: 7px 10px; border-radius: 9px; font-size: 11px; letter-spacing: .06em; color: var(--mute); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.setting input[type="text"] { width: 160px; flex: none; }
+.keys { margin-top: 20px; font-size: 11px; color: var(--mute); line-height: 2; }
+kbd { font: inherit; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); }
+
+/* ---------- ringing ---------- */
+.ring {
+  position: fixed; inset: 0; display: grid; place-items: center; text-align: center;
+  background: var(--bg); opacity: 0; pointer-events: none; transition: opacity .6s ease; overflow: hidden;
+}
+body.ringing .ring { opacity: 1; pointer-events: auto; }
+.ring .waves { position: absolute; left: 50%; top: 42%; width: 0; height: 0; }
+.ring .waves i {
+  position: absolute; left: -40vmax; top: -40vmax; width: 80vmax; height: 80vmax; border-radius: 50%;
+  border: 1px solid var(--accent); opacity: 0;
+}
+body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1) infinite; }
+.ring .waves i:nth-child(2) { animation-delay: 1.2s !important; }
+.ring .waves i:nth-child(3) { animation-delay: 2.4s !important; }
+@keyframes ripple { 0% { transform: scale(.04); opacity: .9 } 100% { transform: scale(1); opacity: 0 } }
+.ring .glow {
+  position: absolute; inset: 0;
+  background: radial-gradient(50% 40% at 50% 42%, color-mix(in srgb, var(--accent) 30%, transparent), transparent 70%);
+  animation: breathe 2.4s ease-in-out infinite;
+}
+@keyframes breathe { 50% { opacity: .35 } }
+.ring .inner { position: relative; display: grid; gap: 18px; justify-items: center; padding: 24px; }
+.ring .kicker { font-size: 11px; letter-spacing: .4em; text-transform: uppercase; color: var(--accent); }
+.ring .big { font: 800 min(40vw, 26vh)/.85 var(--display); font-variant-numeric: tabular-nums; }
+.ring .what { font-size: clamp(14px, 3.4vw, 20px); letter-spacing: .06em; max-width: 26ch; line-height: 1.4; }
+.ring .acts { display: flex; gap: 10px; margin-top: 18px; }
+.ring .btn { padding: 16px 26px; font-size: 12px; }
+
+@media (min-aspect-ratio: 5/4) {
+  .clock { flex-direction: row; align-items: center; font-size: min(30vw, 62vh); }
+  .sep { flex-direction: column; height: auto; width: .24em; gap: .5em; }
+  .sep i { width: 1px; height: clamp(18px, 6vh, 40px); }
+  .sep b { width: 8px; height: 8px; }
+  .clock .meta { position: absolute; bottom: clamp(90px, 16vh, 150px); left: 0; right: 0; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .d span.in { animation: fade .6s ease both; }
+  .d span.out { animation: fade .4s ease reverse both; }
+  @keyframes fade { from { opacity: 0 } }
+  #stage { transition: none; }
+}
+</style>
+</head>
+<body class="intro">
+
+<canvas id="tide" aria-hidden="true"></canvas>
+<div class="grain" aria-hidden="true"></div>
+<div class="vignette" aria-hidden="true"></div>
+<div class="ruler" id="ruler" aria-hidden="true"></div>
+<div class="rail" aria-hidden="true"><i id="secfill"></i></div>
+<div class="edge" id="edge" aria-hidden="true"></div>
+
+<main id="stage">
+  <header>
+    <div class="place"><i class="live"></i><span id="place"></span></div>
+    <div class="date"><span id="date"></span><small id="zone"></small></div>
+  </header>
+
+  <section class="clock" id="clock" role="timer" aria-live="off" title="Double-click for fullscreen">
+    <div class="row" id="hh"></div>
+    <div class="sep" aria-hidden="true"><i></i><b></b><i></i></div>
+    <div class="row" id="mm"></div>
+    <div class="meta"><span id="ampm"></span><span class="dot" id="ampmdot">·</span><span id="ss"></span></div>
+  </section>
+
+  <footer>
+    <div class="next" id="next"></div>
+    <button class="hint" id="hint" hidden>Click to arm alarm sound</button>
+    <nav class="tools">
+      <button class="tool" data-open="alarms" title="Alarms & timers (A)" aria-label="Alarms and timers">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 17V11a6 6 0 1 1 12 0v6l1.5 2h-15z"/><path d="M10 21.5h4"/></svg>
+        <span class="count" id="count"></span>
+      </button>
+      <button class="tool" data-open="settings" title="Settings (S)" aria-label="Settings">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>
+      </button>
+      <button class="tool" id="fs" title="Fullscreen (F)" aria-label="Fullscreen">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+      </button>
+    </nav>
+  </footer>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="sheet" id="sheet" aria-label="Alarms and settings">
+  <i class="grab"></i>
+  <div class="sheet-head">
+    <div class="tabs" role="tablist">
+      <button role="tab" data-tab="alarms" aria-selected="true">Alarms</button>
+      <button role="tab" data-tab="settings" aria-selected="false">Settings</button>
+    </div>
+    <button class="close" id="close" aria-label="Close">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
+  </div>
+  <div class="sheet-body">
+    <section class="pane" data-pane="alarms">
+      <div class="label">Remind me in</div>
+      <div class="quick">
+        <button class="chip" data-in="5">5 min</button>
+        <button class="chip" data-in="15">15 min</button>
+        <button class="chip" data-in="30">30 min</button>
+        <button class="chip" data-in="60">1 hour</button>
+      </div>
+
+      <div class="label" id="composeLabel">New alarm</div>
+      <form class="compose" id="compose" autocomplete="off">
+        <div class="top">
+          <input type="time" id="fTime" required>
+          <input type="text" id="fLabel" placeholder="Label — e.g. Stand-up" maxlength="60">
+        </div>
+        <div class="days" id="fDays"></div>
+        <div class="row2">
+          <select id="fSound" aria-label="Sound">
+            <option value="glass">Sound · Glass</option>
+            <option value="soft">Sound · Marimba</option>
+            <option value="pulse">Sound · Pulse</option>
+          </select>
+          <button type="button" class="btn" id="preview" title="Preview sound">▶</button>
+          <button type="submit" class="btn primary" id="save">Add</button>
+        </div>
+      </form>
+
+      <div class="label">Scheduled</div>
+      <div class="list" id="list"></div>
+    </section>
+
+    <section class="pane" data-pane="settings" hidden>
+      <div class="setting"><div>24-hour time</div><button class="switch" role="switch" data-set="h24"></button></div>
+      <div class="setting"><div>Show seconds</div><button class="switch" role="switch" data-set="seconds"></button></div>
+      <div class="setting">
+        <div>Chime<small>A soft bell to keep you aware of time passing</small></div>
+        <div class="seg" data-seg="chime"><button data-v="0">Off</button><button data-v="15">15m</button><button data-v="30">30m</button><button data-v="60">1h</button></div>
+      </div>
+      <div class="setting">
+        <div>Theme</div>
+        <div class="seg" data-seg="theme"><button data-v="dark">Dark</button><button data-v="light">Light</button><button data-v="system">System</button></div>
+      </div>
+      <div class="setting"><div>Keep screen awake<small>Stops the display from sleeping while this tab is visible</small></div><button class="switch" role="switch" data-set="awake"></button></div>
+      <div class="setting"><div>Place name<small>Shown at the top-left</small></div><input type="text" id="placeInput" maxlength="32"></div>
+      <div class="keys">
+        <kbd>F</kbd> fullscreen &nbsp; <kbd>A</kbd> alarms &nbsp; <kbd>S</kbd> settings &nbsp; <kbd>Esc</kbd> close<br>
+        The colour of the minutes and the tide follows the sun through your day. The tide rises from midnight to midnight.
+      </div>
+    </section>
+  </div>
+</aside>
+
+<div class="ring" id="ring" role="alertdialog" aria-label="Alarm">
+  <div class="glow"></div>
+  <div class="waves"><i></i><i></i><i></i></div>
+  <div class="inner">
+    <div class="kicker" id="ringKind">Alarm</div>
+    <div class="big" id="ringTime"></div>
+    <div class="what" id="ringLabel"></div>
+    <div class="acts">
+      <button class="btn" id="snooze">Snooze 5</button>
+      <button class="btn primary" id="dismiss">Dismiss</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const pad = n => String(n).padStart(2, '0');
+  const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  /* ---------- persistence ---------- */
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('wtii.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
+    set(k, v) { try { localStorage.setItem('wtii.' + k, JSON.stringify(v)); } catch {} }
+  };
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  const localeH24 = (() => {
+    try { return !/h1[12]/.test(new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle || ''); }
+    catch { return true; }
+  })();
+  const settings = Object.assign(
+    { h24: localeH24, seconds: true, chime: 0, theme: 'dark', awake: false, place: '' },
+    store.get('settings', {})
+  );
+  let alarms = store.get('alarms', []);   // {id, time:'HH:MM', label, days:[0-6], sound, enabled}
+  let timers = store.get('timers', []);   // {id, at:ms, label, sound, kind}
+  const save = () => { store.set('settings', settings); store.set('alarms', alarms); store.set('timers', timers); };
+  const uid = () => Math.random().toString(36).slice(2, 9);
+
+  /* ---------- colour of the day ---------- */
+  const SKY = [
+    [0, '#7b83ff'], [4.5, '#a78bfa'], [6.5, '#ff8f6b'], [9, '#ffc56b'],
+    [12, '#7ee0c3'], [15.5, '#6bc7ff'], [18, '#ff9a5c'], [19.5, '#ff6b93'],
+    [21.5, '#9b7bff'], [24, '#7b83ff']
+  ];
+  const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
+  let accentRGB = hex('#7ee0c3');
+  function accentAt(hour) {
+    let i = 0;
+    while (i < SKY.length - 2 && SKY[i + 1][0] <= hour) i++;
+    const [h0, c0] = SKY[i], [h1, c1] = SKY[i + 1];
+    const t = (hour - h0) / (h1 - h0), a = hex(c0), b = hex(c1);
+    const e = t * t * (3 - 2 * t);
+    return a.map((v, k) => Math.round(v + (b[k] - v) * e));
+  }
+  function applyAccent(now) {
+    accentRGB = accentAt(now.getHours() + now.getMinutes() / 60);
+    document.documentElement.style.setProperty('--accent', `rgb(${accentRGB.join(',')})`);
+  }
+
+  /* ---------- theme ---------- */
+  const sysDark = matchMedia('(prefers-color-scheme: dark)');
+  function applyTheme() {
+    const t = settings.theme === 'system' ? (sysDark.matches ? 'dark' : 'light') : settings.theme;
+    document.documentElement.dataset.theme = t;
+    $('meta[name="theme-color"]').content = t === 'light' ? '#eeebe4' : '#0a0a0c';
+    document.body.classList.toggle('no-seconds', !settings.seconds);
+  }
+  sysDark.addEventListener?.('change', applyTheme);
+
+  /* ---------- digits ---------- */
+  function slots(row, n) {
+    for (let i = 0; i < n; i++) { const d = document.createElement('div'); d.className = 'd'; row.appendChild(d); }
+    return $$('.d', row);
+  }
+  const hSlots = slots($('#hh'), 2), mSlots = slots($('#mm'), 2);
+  function setDigit(el, ch, animate, delay = 0) {
+    if (el.dataset.v === ch) return;
+    el.dataset.v = ch;
+    const old = el.querySelector('span:not(.out)');
+    if (old) {
+      old.classList.remove('in');
+      if (animate) {
+        old.classList.add('out');
+        old.addEventListener('animationend', () => old.remove(), { once: true });
+        setTimeout(() => old.remove(), 1500);
+      } else old.remove();
+    }
+    const s = document.createElement('span');
+    s.textContent = ch;
+    if (animate) { s.className = 'in'; s.style.animationDelay = delay + 'ms'; }
+    el.appendChild(s);
+  }
+
+  /* ---------- formatting ---------- */
+  const fmtHM = (h, m) => {
+    if (settings.h24) return `${pad(h)}:${pad(m)}`;
+    return `${h % 12 || 12}:${pad(m)} ${h < 12 ? 'AM' : 'PM'}`;
+  };
+  const fmtTimeStr = t => { const [h, m] = t.split(':').map(Number); return fmtHM(h, m); };
+  const fmtIn = ms => {
+    const mins = Math.max(0, Math.ceil(ms / 60000));
+    if (mins < 60) return `in ${mins} min`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    if (h < 24) return m ? `in ${h}h ${m}m` : `in ${h}h`;
+    return `in ${Math.floor(h / 24)}d ${h % 24}h`;
+  };
+  const daysText = days => {
+    if (!days.length) return 'Once';
+    if (days.length === 7) return 'Every day';
+    const s = [...days].sort().join('');
+    if (s === '12345') return 'Weekdays';
+    if (s === '06') return 'Weekends';
+    return [1, 2, 3, 4, 5, 6, 0].filter(d => days.includes(d)).map(d => DAYS[d]).join(' ');
+  };
+
+  /* ---------- header ---------- */
+  function placeName() {
+    if (settings.place) return settings.place;
+    const city = tz.split('/').pop() || 'Local time';
+    return city.replace(/_/g, ' ');
+  }
+  function zoneText(now) {
+    const off = -now.getTimezoneOffset(), sign = off >= 0 ? '+' : '−', a = Math.abs(off);
+    return `UTC${sign}${Math.floor(a / 60)}${a % 60 ? ':' + pad(a % 60) : ''}`;
+  }
+  const dateFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+
+  /* ---------- render ---------- */
+  let first = true;
+  function render(now) {
+    const h = now.getHours(), m = now.getMinutes(), s = now.getSeconds();
+    const hh = settings.h24 ? pad(h) : String(h % 12 || 12).padStart(2, ' ');
+    const mm = pad(m);
+    const anim = !first;
+    const base = first ? 350 : 0;
+    hSlots[0].hidden = hh[0] === ' ';
+    [hh[0], hh[1], mm[0], mm[1]].forEach((ch, i) => {
+      const el = i < 2 ? hSlots[i] : mSlots[i - 2];
+      setDigit(el, ch === ' ' ? '' : ch, anim || !reduced, base + i * 110);
+    });
+    $('#ss').textContent = pad(s);
+    $('#ampm').textContent = settings.h24 ? '' : (h < 12 ? 'AM' : 'PM');
+    $('#ampmdot').hidden = settings.h24 || !settings.seconds;
+    $('#place').textContent = placeName();
+    $('#date').textContent = dateFmt.format(now).replace(/,/g, '');
+    $('#zone').textContent = zoneText(now);
+    if ($('#ring').dataset.on) $('#ringTime').textContent = fmtHM(h, m).replace(/ (AM|PM)$/, '');
+    first = false;
+  }
+
+  /* ---------- ruler ---------- */
+  (function buildRuler() {
+    const r = $('#ruler');
+    for (let h = 0; h <= 24; h++) {
+      const i = document.createElement('i');
+      i.style.bottom = (h / 24 * 100) + '%';
+      if (h % 6 === 0) {
+        i.className = 'major';
+        if (h > 0 && h < 24) {
+          const b = document.createElement('b');
+          b.textContent = pad(h);
+          b.style.bottom = (h / 24 * 100) + '%';
+          r.appendChild(b);
+        }
+      }
+      r.appendChild(i);
+    }
+  })();
+
+  /* ---------- tide (canvas) ---------- */
+  const cv = $('#tide'), cx = cv.getContext('2d');
+  let W = 0, H = 0, dpr = 1, level = 0, swell = 0, lastFrame = 0;
+  function resize() {
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = cv.width = Math.round(innerWidth * dpr);
+    H = cv.height = Math.round(innerHeight * dpr);
+  }
+  addEventListener('resize', resize); resize();
+
+  function frame(ts) {
+    requestAnimationFrame(frame);
+    const now = new Date();
+    // seconds rail — smooth, every frame
+    const secFrac = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
+    $('#secfill').style.transform = `scaleY(${secFrac})`;
+    if (ts - lastFrame < 33) return; // ~30fps is plenty for water
+    lastFrame = ts;
+
+    const dayFrac = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000) / 86400;
+    level += (dayFrac - level) * (Math.abs(dayFrac - level) > .002 ? .035 : 1);
+    swell *= .985;
+
+    const t = ts / 1000;
+    const surface = H - level * H;
+    const A = (reduced ? 2 : 5) * dpr + swell * 22 * dpr;
+    const [r, g, b] = accentRGB;
+    const light = document.documentElement.dataset.theme === 'light';
+    const alpha = light ? .8 : 1;
+    cx.clearRect(0, 0, W, H);
+
+    const layer = (amp, k, speed, phase, a0, a1) => {
+      cx.beginPath();
+      cx.moveTo(0, H);
+      for (let x = 0; x <= W + 8; x += 8 * dpr) {
+        const y = surface
+          + Math.sin(x / W * Math.PI * 2 * k + t * speed + phase) * amp
+          + Math.sin(x / W * Math.PI * 2 * (k * 2.3) - t * speed * 1.7) * amp * .35;
+        cx.lineTo(x, y);
+      }
+      cx.lineTo(W, H); cx.closePath();
+      const grd = cx.createLinearGradient(0, surface - amp, 0, H);
+      grd.addColorStop(0, `rgba(${r},${g},${b},${a0 * alpha})`);
+      grd.addColorStop(1, `rgba(${r},${g},${b},${a1 * alpha})`);
+      cx.fillStyle = grd; cx.fill();
+    };
+    layer(A * 1.3, 1.1, reduced ? .08 : .35, 1.7, .10, .03);
+    layer(A, 1.6, reduced ? -.1 : -.5, 0, .16, .05);
+
+    // bright meniscus
+    cx.beginPath();
+    for (let x = 0; x <= W + 8; x += 6 * dpr) {
+      const y = surface
+        + Math.sin(x / W * Math.PI * 2 * 1.6 + t * (reduced ? -.1 : -.5)) * A
+        + Math.sin(x / W * Math.PI * 2 * 3.68 - t * (reduced ? -.17 : -.85)) * A * .35;
+      x ? cx.lineTo(x, y) : cx.moveTo(x, y);
+    }
+    cx.strokeStyle = `rgba(${r},${g},${b},${.55 * alpha})`;
+    cx.lineWidth = 1 * dpr;
+    cx.shadowColor = `rgba(${r},${g},${b},.8)`; cx.shadowBlur = 14 * dpr;
+    cx.stroke(); cx.shadowBlur = 0;
+  }
+
+  /* ---------- audio ---------- */
+  let actx = null, master = null;
+  function audio() {
+    if (!actx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      actx = new AC();
+      const comp = actx.createDynamicsCompressor();
+      master = actx.createGain(); master.gain.value = .9;
+      master.connect(comp); comp.connect(actx.destination);
+    }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  const armed = () => actx && actx.state === 'running';
+  ['pointerdown', 'keydown', 'touchstart'].forEach(e => addEventListener(e, () => { audio(); updateHint(); }, { passive: true }));
+
+  function bell(freq, at, dur, gain = .22) {
+    const a = actx;
+    [[1, 1], [2.76, .42], [5.4, .16], [8.93, .06]].forEach(([mult, g]) => {
+      const o = a.createOscillator(), v = a.createGain();
+      o.type = 'sine'; o.frequency.value = freq * mult;
+      v.gain.setValueAtTime(0, at);
+      v.gain.linearRampToValueAtTime(gain * g, at + .008);
+      v.gain.exponentialRampToValueAtTime(.0001, at + dur / (mult * .6 + .4));
+      o.connect(v); v.connect(master); o.start(at); o.stop(at + dur + .1);
+    });
+  }
+  function note(freq, at, dur, type, gain, cutoff = 4000) {
+    const a = actx, o = a.createOscillator(), v = a.createGain(), f = a.createBiquadFilter();
+    o.type = type; o.frequency.value = freq;
+    f.type = 'lowpass'; f.frequency.value = cutoff;
+    v.gain.setValueAtTime(0, at);
+    v.gain.linearRampToValueAtTime(gain, at + .006);
+    v.gain.exponentialRampToValueAtTime(.0001, at + dur);
+    o.connect(f); f.connect(v); v.connect(master); o.start(at); o.stop(at + dur + .05);
+  }
+  const SOUNDS = {
+    glass(t) { bell(1318.5, t, 1.8); bell(987.8, t + .24, 2); bell(1318.5, t + .48, 2.6); },
+    soft(t) { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => { note(f, t + i * .14, .9, 'triangle', .28, 2600); note(f * 4, t + i * .14, .12, 'sine', .05); }); },
+    pulse(t) { for (let j = 0; j < 2; j++) for (let i = 0; i < 4; i++) note(880, t + j * .8 + i * .13, .09, 'square', .12, 2200); },
+    chime(t) { bell(783.99, t, 1.6, .13); bell(1046.5, t + .38, 2.2, .13); }
+  };
+  function play(name) {
+    const a = audio(); if (!a) return;
+    (SOUNDS[name] || SOUNDS.glass)(a.currentTime + .03);
+  }
+
+  /* ---------- scheduling ---------- */
+  function nextAlarm(nowMs) {
+    const now = new Date(nowMs);
+    let best = null;
+    const consider = (at, label, extra) => { if (at > nowMs && (!best || at < best.at)) best = { at, label, ...extra }; };
+    alarms.filter(a => a.enabled).forEach(a => {
+      const [h, m] = a.time.split(':').map(Number);
+      for (let off = 0; off < 8; off++) {
+        const c = new Date(now.getFullYear(), now.getMonth(), now.getDate() + off, h, m, 0, 0);
+        if (+c <= nowMs) continue;
+        if (a.days.length && !a.days.includes(c.getDay())) continue;
+        consider(c.getTime(), a.label, { time: a.time });
+        break;
+      }
+    });
+    timers.forEach(t => consider(t.at, t.label, { timer: true }));
+    return best;
+  }
+  const BELL_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 17V11a6 6 0 1 1 12 0v6l1.5 2h-15z"/></svg>';
+  function updateNext(now = new Date()) {
+    const n = nextAlarm(+now), el = $('#next');
+    if (!n) {
+      el.innerHTML = settings.chime ? `${BELL_ICON}<span>Chime every ${settings.chime === 60 ? 'hour' : settings.chime + ' min'}</span>` : '';
+    } else {
+      const d = new Date(n.at);
+      el.innerHTML = `${BELL_ICON}<b>${fmtHM(d.getHours(), d.getMinutes())}</b><span>${n.label ? escapeHTML(n.label) + ' · ' : ''}${fmtIn(n.at - now)}</span>`;
+    }
+    $('#count').textContent = (alarms.filter(a => a.enabled).length + timers.length) || '';
+    updateHint();
+  }
+  function updateHint() {
+    const needs = alarms.some(a => a.enabled) || timers.length || settings.chime;
+    $('#hint').hidden = !needs || armed();
+  }
+  const escapeHTML = s => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+  let lastCheck = Date.now();
+  function checkDue(now) {
+    // Walk every minute boundary crossed since the last check (handles throttled tabs).
+    const from = Math.max(lastCheck, +now - 10 * 60000);
+    const due = [];
+    const start = new Date(from); start.setSeconds(0, 0);
+    for (let t = +start + 60000; t <= +now; t += 60000) {
+      const d = new Date(t), key = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+      alarms.forEach(a => {
+        if (a.enabled && a.time === key && (!a.days.length || a.days.includes(d.getDay()))) {
+          due.push({ label: a.label, sound: a.sound, kind: 'Alarm' });
+          if (!a.days.length) a.enabled = false;
+        }
+      });
+      if (settings.chime && d.getMinutes() % settings.chime === 0) due.push({ chime: true, hour: d.getMinutes() === 0 });
+    }
+    timers = timers.filter(t => {
+      if (t.at <= +now) { due.push({ label: t.label, sound: t.sound, kind: t.kind || 'Reminder' }); return false; }
+      return true;
+    });
+    lastCheck = +now;
+    const real = due.filter(x => !x.chime);
+    if (real.length) { save(); renderList(); ring(real[real.length - 1]); }
+    else if (due.length) chime(due.some(x => x.hour));
+  }
+
+  function chime(hour) {
+    play('chime');
+    const e = $('#edge'); e.classList.remove('flash'); void e.offsetWidth; e.classList.add('flash');
+    swell = hour ? 1 : .6;
+  }
+
+  /* ---------- ringing ---------- */
+  let ringLoop = null, ringStop = null, titleLoop = null, current = null;
+  function ring(a) {
+    current = a;
+    const now = new Date(), ringEl = $('#ring');
+    ringEl.dataset.on = '1';
+    $('#ringKind').textContent = a.kind || 'Alarm';
+    $('#ringLabel').textContent = a.label || 'Time’s up';
+    $('#ringTime').textContent = fmtHM(now.getHours(), now.getMinutes()).replace(/ (AM|PM)$/, '');
+    closeSheet();
+    document.body.classList.add('ringing');
+    swell = 1.4;
+    clearInterval(ringLoop); clearTimeout(ringStop); clearInterval(titleLoop);
+    play(a.sound); ringLoop = setInterval(() => play(a.sound), 2600);
+    ringStop = setTimeout(() => clearInterval(ringLoop), 3 * 60000);
+    let flip = false;
+    titleLoop = setInterval(() => { document.title = (flip = !flip) ? `⏰ ${a.label || 'Alarm'}` : 'What Time Is It'; }, 1000);
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const n = new Notification(a.label || 'Alarm', { body: `It’s ${fmtHM(now.getHours(), now.getMinutes())}`, tag: 'wtii', requireInteraction: true });
+        n.onclick = () => { window.focus(); n.close(); };
+      }
+    } catch {}
+    setTimeout(() => $('#dismiss').focus(), 50);
+  }
+  function stopRing() {
+    clearInterval(ringLoop); clearTimeout(ringStop); clearInterval(titleLoop);
+    document.title = 'What Time Is It';
+    document.body.classList.remove('ringing');
+    delete $('#ring').dataset.on;
+    updateNext();
+  }
+  $('#dismiss').onclick = stopRing;
+  $('#snooze').onclick = () => {
+    const a = current || {};
+    timers.push({ id: uid(), at: Date.now() + 5 * 60000, label: a.label || 'Snoozed', sound: a.sound, kind: 'Snoozed' });
+    save(); renderList(); stopRing();
+  };
+
+  /* ---------- sheet ---------- */
+  function openSheet(tab = 'alarms') {
+    $$('.tabs button').forEach(b => b.setAttribute('aria-selected', b.dataset.tab === tab));
+    $$('.pane').forEach(p => p.hidden = p.dataset.pane !== tab);
+    document.body.classList.add('open');
+    document.body.classList.remove('idle');
+    if (tab === 'alarms' && !$('#fTime').value) {
+      const d = new Date(Date.now() + 60 * 60000);
+      $('#fTime').value = `${pad(d.getHours())}:00`;
+    }
+  }
+  function closeSheet() { document.body.classList.remove('open'); resetForm(); }
+  $$('[data-open]').forEach(b => b.onclick = () => openSheet(b.dataset.open));
+  $$('.tabs button').forEach(b => b.onclick = () => openSheet(b.dataset.tab));
+  $('#close').onclick = closeSheet;
+  $('#scrim').onclick = closeSheet;
+
+  // day chips
+  const fDays = $('#fDays');
+  [1, 2, 3, 4, 5, 6, 0].forEach(d => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'chip'; b.dataset.d = d; b.textContent = DAYS[d].slice(0, 2);
+    b.setAttribute('aria-pressed', 'false');
+    b.onclick = () => b.setAttribute('aria-pressed', b.getAttribute('aria-pressed') !== 'true');
+    fDays.appendChild(b);
+  });
+
+  let editing = null;
+  function resetForm() {
+    editing = null;
+    $('#fLabel').value = '';
+    $$('.chip', fDays).forEach(b => b.setAttribute('aria-pressed', 'false'));
+    $('#save').textContent = 'Add';
+    $('#composeLabel').textContent = 'New alarm';
+  }
+  function askNotify() {
+    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch {}
+  }
+  $('#compose').onsubmit = e => {
+    e.preventDefault();
+    const time = $('#fTime').value;
+    if (!time) return;
+    const data = {
+      time, label: $('#fLabel').value.trim(), sound: $('#fSound').value, enabled: true,
+      days: $$('.chip', fDays).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => +b.dataset.d)
+    };
+    if (editing) Object.assign(alarms.find(a => a.id === editing) || {}, data);
+    else alarms.push({ id: uid(), ...data });
+    alarms.sort((a, b) => a.time.localeCompare(b.time));
+    audio(); askNotify(); save(); resetForm(); renderList(); updateNext();
+  };
+  $('#preview').onclick = () => play($('#fSound').value);
+  $$('[data-in]').forEach(b => b.onclick = () => {
+    const mins = +b.dataset.in;
+    timers.push({ id: uid(), at: Date.now() + mins * 60000, label: `${mins < 60 ? mins + ' min' : '1 hour'} reminder`, sound: $('#fSound').value, kind: 'Reminder' });
+    audio(); askNotify(); save(); renderList(); updateNext();
+    b.animate([{ transform: 'scale(.94)' }, { transform: 'scale(1)' }], { duration: 400, easing: 'cubic-bezier(.16,1,.3,1)' });
+  });
+
+  function renderList() {
+    const list = $('#list');
+    list.innerHTML = '';
+    const now = Date.now();
+    if (!alarms.length && !timers.length) {
+      list.innerHTML = '<div class="empty">Nothing scheduled. Add an alarm above, or tap a quick reminder.</div>';
+      return;
+    }
+    [...timers].sort((a, b) => a.at - b.at).forEach(t => {
+      const d = new Date(t.at);
+      const row = document.createElement('div'); row.className = 'item';
+      row.innerHTML = `<div class="t">${fmtHM(d.getHours(), d.getMinutes())}<small>${escapeHTML(t.kind || 'Reminder')} · ${escapeHTML(t.label)} · ${fmtIn(t.at - now)}</small></div><span></span>
+        <button class="del" aria-label="Cancel reminder"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+      $('.del', row).onclick = () => { timers = timers.filter(x => x.id !== t.id); save(); renderList(); updateNext(); };
+      list.appendChild(row);
+    });
+    alarms.forEach(a => {
+      const row = document.createElement('div'); row.className = 'item' + (a.enabled ? '' : ' off');
+      row.innerHTML = `<div class="t" title="Edit">${fmtTimeStr(a.time)}<small>${daysText(a.days)}${a.label ? ' · ' + escapeHTML(a.label) : ''}</small></div>
+        <button class="switch" role="switch" aria-checked="${a.enabled}" aria-label="Enabled"></button>
+        <button class="del" aria-label="Delete alarm"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 7h14M10 7V5h4v2M7 7l1 13h8l1-13"/></svg></button>`;
+      $('.switch', row).onclick = () => { a.enabled = !a.enabled; audio(); save(); renderList(); updateNext(); };
+      $('.del', row).onclick = () => { alarms = alarms.filter(x => x.id !== a.id); if (editing === a.id) resetForm(); save(); renderList(); updateNext(); };
+      $('.t', row).onclick = () => {
+        editing = a.id;
+        $('#fTime').value = a.time; $('#fLabel').value = a.label; $('#fSound').value = a.sound || 'glass';
+        $$('.chip', fDays).forEach(b => b.setAttribute('aria-pressed', a.days.includes(+b.dataset.d)));
+        $('#save').textContent = 'Save'; $('#composeLabel').textContent = 'Edit alarm';
+        $('#fTime').focus();
+      };
+      list.appendChild(row);
+    });
+  }
+
+  /* ---------- settings ---------- */
+  function syncSettingsUI() {
+    $$('[data-set]').forEach(b => b.setAttribute('aria-checked', !!settings[b.dataset.set]));
+    $$('[data-seg]').forEach(seg => $$('button', seg).forEach(b =>
+      b.setAttribute('aria-pressed', String(settings[seg.dataset.seg]) === b.dataset.v)));
+    $('#placeInput').value = settings.place;
+    $('#placeInput').placeholder = tz.split('/').pop()?.replace(/_/g, ' ') || 'Local time';
+  }
+  $$('[data-set]').forEach(b => b.onclick = () => {
+    const k = b.dataset.set; settings[k] = !settings[k];
+    save(); syncSettingsUI(); applyTheme(); render(new Date()); renderList(); updateNext();
+    if (k === 'awake') applyWake();
+  });
+  $$('[data-seg]').forEach(seg => $$('button', seg).forEach(b => b.onclick = () => {
+    const k = seg.dataset.seg;
+    settings[k] = k === 'chime' ? +b.dataset.v : b.dataset.v;
+    if (k === 'chime' && settings.chime) { audio(); play('chime'); }
+    save(); syncSettingsUI(); applyTheme(); updateNext();
+  }));
+  $('#placeInput').oninput = e => { settings.place = e.target.value.trim(); save(); render(new Date()); };
+
+  /* ---------- wake lock ---------- */
+  let wake = null;
+  async function applyWake() {
+    try {
+      if (settings.awake && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+        if (!wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); }
+      } else if (wake) { await wake.release(); wake = null; }
+    } catch {}
+  }
+  document.addEventListener('visibilitychange', () => { applyWake(); tick(); });
+
+  /* ---------- fullscreen, idle, keys ---------- */
+  function toggleFS() {
+    if (document.fullscreenElement) document.exitFullscreen?.();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+  $('#fs').onclick = toggleFS;
+  $('#clock').ondblclick = toggleFS;
+  $('#hint').onclick = () => { audio(); play('chime'); updateHint(); };
+
+  let idleT;
+  function wakeUI() {
+    document.body.classList.remove('idle');
+    clearTimeout(idleT);
+    idleT = setTimeout(() => { if (!document.body.classList.contains('open')) document.body.classList.add('idle'); }, 3500);
+  }
+  ['mousemove', 'pointerdown', 'keydown'].forEach(e => addEventListener(e, wakeUI, { passive: true }));
+
+  addEventListener('keydown', e => {
+    if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
+    const ringing = document.body.classList.contains('ringing');
+    if (ringing) {
+      if (e.key === 'Escape' || e.key === 'Enter' || e.key === ' ') { e.preventDefault(); stopRing(); }
+      else if (e.key.toLowerCase() === 'z') $('#snooze').click();
+      return;
+    }
+    const k = e.key.toLowerCase();
+    if (k === 'escape') closeSheet();
+    else if (k === 'f') toggleFS();
+    else if (k === 'a') openSheet('alarms');
+    else if (k === 's') openSheet('settings');
+  });
+
+  /* ---------- burn-in drift ---------- */
+  function drift() {
+    const s = $('#stage');
+    s.style.setProperty('--dx', (Math.random() * 8 - 4).toFixed(1) + 'px');
+    s.style.setProperty('--dy', (Math.random() * 8 - 4).toFixed(1) + 'px');
+  }
+
+  /* ---------- main loop ---------- */
+  let lastMinute = -1;
+  function tick() {
+    const now = new Date();
+    render(now);
+    const mk = Math.floor(+now / 60000);
+    if (mk !== lastMinute) {
+      if (lastMinute !== -1) { swell = Math.max(swell, now.getMinutes() === 0 ? .9 : .35); drift(); }
+      lastMinute = mk;
+      applyAccent(now);
+      updateNext(now);
+      if ($('#list').isConnected && document.body.classList.contains('open')) renderList();
+    }
+    checkDue(now);
+  }
+
+  applyTheme();
+  syncSettingsUI();
+  renderList();
+  tick();
+  setInterval(tick, 250);
+  requestAnimationFrame(frame);
+  requestAnimationFrame(() => setTimeout(() => document.body.classList.remove('intro'), 60));
+  wakeUI();
+  applyWake();
+})();
+</script>
+</body>
+</html>
