@@ -74,14 +74,14 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px s
 
 /* day ruler (left) + seconds rail (right) */
 .ruler, .rail { position: fixed; top: 0; bottom: 0; width: 26px; pointer-events: none; }
-.ruler { left: 0; }
+.ruler { left: 16px; }
 .ruler i { position: absolute; left: 0; height: 1px; width: 6px; background: var(--faint); transform: translateY(50%); }
 .ruler i.major { width: 12px; background: var(--mute); }
 .ruler b {
   position: absolute; left: 16px; transform: translateY(50%);
   font: 500 9px/1 var(--mono); letter-spacing: .1em; color: var(--mute);
 }
-.rail { right: 0; }
+.rail { right: 16px; }
 .rail::before { content: ''; position: absolute; right: 12px; top: 0; bottom: 0; width: 1px; background: var(--line); }
 .rail i {
   position: absolute; right: 12px; top: 0; width: 1px; height: 100%;
@@ -95,13 +95,28 @@ button:focus-visible, input:focus-visible, select:focus-visible { outline: 1px s
 }
 body.no-seconds .rail i { opacity: 0; }
 
+/* ---------- screen care ---------- */
+/* Everything static lives inside #orbit, which drifts in a slow, continuous loop. */
+#orbit { position: fixed; inset: 0; will-change: transform; }
+.sweep {
+  position: fixed; top: 0; bottom: 0; left: 0; width: 70vw; pointer-events: none; opacity: 0;
+  background: linear-gradient(90deg, transparent, #fff 35%, #fff 65%, transparent);
+  mix-blend-mode: difference; transform: translateX(-80vw);
+}
+.sweep.go { animation: sweep 3.2s cubic-bezier(.45, 0, .55, 1); }
+@keyframes sweep {
+  0% { transform: translateX(-80vw); opacity: 1 }
+  100% { transform: translateX(110vw); opacity: 1 }
+}
+.dimmer { position: fixed; inset: 0; pointer-events: none; background: #000; opacity: 0; transition: opacity 90s linear; }
+body.dim .dimmer { opacity: .45; }
+body.ringing .dimmer { opacity: 0; transition: opacity .3s; }
+
 /* ---------- stage ---------- */
 #stage {
   position: fixed; inset: 0;
   display: grid; grid-template-rows: auto 1fr auto;
   padding: clamp(20px, 4.5vh, 44px) clamp(36px, 8vw, 64px);
-  transform: translate(var(--dx, 0px), var(--dy, 0px));
-  transition: transform 20s ease-in-out;
 }
 header {
   display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
@@ -323,7 +338,6 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   .d span.in { animation: fade .6s ease both; }
   .d span.out { animation: fade .4s ease reverse both; }
   @keyframes fade { from { opacity: 0 } }
-  #stage { transition: none; }
 }
 </style>
 </head>
@@ -332,6 +346,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
 <canvas id="tide" aria-hidden="true"></canvas>
 <div class="grain" aria-hidden="true"></div>
 <div class="vignette" aria-hidden="true"></div>
+<div id="orbit">
 <div class="ruler" id="ruler" aria-hidden="true"></div>
 <div class="rail" aria-hidden="true"><i id="secfill"></i></div>
 <div class="edge" id="edge" aria-hidden="true"></div>
@@ -366,6 +381,9 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     </nav>
   </footer>
 </main>
+</div>
+<div class="sweep" id="sweep" aria-hidden="true"></div>
+<div class="dimmer" aria-hidden="true"></div>
 
 <div class="scrim" id="scrim"></div>
 <aside class="sheet" id="sheet" aria-label="Alarms and settings">
@@ -422,6 +440,11 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
         <div>Theme</div>
         <div class="seg" data-seg="theme"><button data-v="dark">Dark</button><button data-v="light">Light</button><button data-v="system">System</button></div>
       </div>
+      <div class="label">Screen care</div>
+      <div class="setting"><div>Pixel orbit<small>The whole layout drifts slowly in a loop of about ±16px, too slow to notice, so no pixel shows the same thing for long</small></div><button class="switch" role="switch" data-set="orbit"></button></div>
+      <div class="setting"><div>Hourly pixel refresh<small>At the top of each hour a soft inverting band sweeps across the screen to clear image retention</small></div><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="sweepNow" style="padding:7px 10px">Run</button><button class="switch" role="switch" data-set="sweep"></button></div></div>
+      <div class="setting"><div>Dim at night<small>Lowers brightness from 22:00 to 07:00</small></div><button class="switch" role="switch" data-set="dim"></button></div>
+      <div class="label">Display</div>
       <div class="setting"><div>Keep screen awake<small>Stops the display from sleeping while this tab is visible</small></div><button class="switch" role="switch" data-set="awake"></button></div>
       <div class="setting"><div>Place name<small>Shown at the top-left</small></div><input type="text" id="placeInput" maxlength="32"></div>
       <div class="keys">
@@ -466,7 +489,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     catch { return true; }
   })();
   const settings = Object.assign(
-    { h24: localeH24, seconds: true, chime: 0, theme: 'dark', awake: false, place: '' },
+    { h24: localeH24, seconds: true, chime: 0, theme: 'dark', awake: false, place: '', orbit: true, sweep: true, dim: true },
     store.get('settings', {})
   );
   let alarms = store.get('alarms', []);   // {id, time:'HH:MM', label, days:[0-6], sound, enabled}
@@ -621,6 +644,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     // seconds rail — smooth, every frame
     const secFrac = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
     $('#secfill').style.transform = `scaleY(${secFrac})`;
+    orbit();
     if (ts - lastFrame < 33) return; // ~30fps is plenty for water
     lastFrame = ts;
 
@@ -928,6 +952,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     const k = b.dataset.set; settings[k] = !settings[k];
     save(); syncSettingsUI(); applyTheme(); render(new Date()); renderList(); updateNext();
     if (k === 'awake') applyWake();
+    if (k === 'dim') applyDim(new Date());
   });
   $$('[data-seg]').forEach(seg => $$('button', seg).forEach(b => b.onclick = () => {
     const k = seg.dataset.seg;
@@ -980,11 +1005,29 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     else if (k === 's') openSheet('settings');
   });
 
-  /* ---------- burn-in drift ---------- */
-  function drift() {
-    const s = $('#stage');
-    s.style.setProperty('--dx', (Math.random() * 8 - 4).toFixed(1) + 'px');
-    s.style.setProperty('--dy', (Math.random() * 8 - 4).toFixed(1) + 'px');
+  /* ---------- screen care ---------- */
+  // Pixel orbit: a slow Lissajous path (7 and 11 minute periods) moved in whole pixels.
+  const orbitEl = $('#orbit');
+  let orbitKey = '';
+  function orbit() {
+    let x = 0, y = 0;
+    if (settings.orbit) {
+      const t = Date.now() / 1000;
+      x = Math.round(16 * Math.sin(t * 2 * Math.PI / 420));
+      y = Math.round(16 * Math.sin(t * 2 * Math.PI / 660 + 1.3));
+    }
+    const k = x + ',' + y;
+    if (k !== orbitKey) { orbitKey = k; orbitEl.style.transform = `translate3d(${x}px, ${y}px, 0)`; }
+  }
+  function sweep() {
+    const el = $('#sweep');
+    el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
+  }
+  $('#sweep').addEventListener('animationend', e => e.target.classList.remove('go'));
+  $('#sweepNow').onclick = () => { closeSheet(); setTimeout(sweep, 700); };
+  function applyDim(now) {
+    const h = now.getHours();
+    document.body.classList.toggle('dim', settings.dim && (h >= 22 || h < 7));
   }
 
   /* ---------- main loop ---------- */
@@ -994,7 +1037,11 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     render(now);
     const mk = Math.floor(+now / 60000);
     if (mk !== lastMinute) {
-      if (lastMinute !== -1) { swell = Math.max(swell, now.getMinutes() === 0 ? .9 : .35); drift(); }
+      if (lastMinute !== -1) {
+        swell = Math.max(swell, now.getMinutes() === 0 ? .9 : .35);
+        if (settings.sweep && now.getMinutes() === 0 && !document.body.classList.contains('ringing')) sweep();
+      }
+      applyDim(now);
       lastMinute = mk;
       applyAccent(now);
       updateNext(now);
