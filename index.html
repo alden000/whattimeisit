@@ -112,6 +112,43 @@ body.no-seconds .rail i { opacity: 0; }
 body.dim .dimmer { opacity: .45; }
 body.ringing .dimmer { opacity: 0; transition: opacity .3s; }
 
+/* sleep: true black, alarms still ring above it */
+.sleep { position: fixed; inset: 0; pointer-events: none; background: #000; opacity: 0; transition: opacity 6s ease; }
+body.sleeping .sleep { opacity: 1; }
+body.sleeping { cursor: none; }
+body.ringing .sleep { opacity: 0; transition: opacity .3s; }
+
+/* pixel refresh: a ~45s cinematic cycle that exercises every subpixel */
+.rest-field, .rest-neg { position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 1.4s ease, background-color 1.8s ease; }
+.rest-field { background: #fff; overflow: hidden; }
+.rest-field::before {
+  content: ''; position: absolute; inset: -60%; opacity: 0; transition: opacity 1.8s ease;
+  background: conic-gradient(from 0deg, #ff2d55, #ff9500, #ffd60a, #34c759, #00c7be, #0a84ff, #5e5ce6, #bf5af2, #ff2d55);
+  animation: spin 9s linear infinite paused;
+}
+.rest-field.spectrum::before { opacity: 1; }
+body.resting .rest-field::before { animation-play-state: running; }
+@keyframes spin { to { transform: rotate(1turn); } }
+.rest-neg { background: #fff; mix-blend-mode: difference; }
+.rest-cap {
+  position: fixed; left: 50%; top: 50%; pointer-events: none; opacity: 0; transition: opacity 1.2s ease;
+  display: grid; gap: 12px; justify-items: center; text-align: center; white-space: nowrap;
+  color: #fff; mix-blend-mode: difference;
+  font: 500 10px/1.4 var(--mono); letter-spacing: .32em; text-transform: uppercase;
+  transform: translate(-50%, -50%);
+}
+.rest-cap b { font: 800 clamp(48px, 16vw, 96px)/.9 var(--display); letter-spacing: .01em; text-transform: none; }
+.rest-cap em { font-style: normal; opacity: .6; }
+body.resting { cursor: none; }
+body.resting .rest-cap { opacity: 1; animation: float 44s ease-in-out both; }
+@keyframes float {
+  0%   { transform: translate(-50%, -50%) translate(0, 0); }
+  25%  { transform: translate(-50%, -50%) translate(-14vw, -26vh); }
+  50%  { transform: translate(-50%, -50%) translate(12vw, 20vh); }
+  75%  { transform: translate(-50%, -50%) translate(-10vw, 30vh); }
+  100% { transform: translate(-50%, -50%) translate(8vw, -18vh); }
+}
+
 /* ---------- stage ---------- */
 #stage {
   position: fixed; inset: 0;
@@ -141,6 +178,9 @@ header .date small { display: block; margin-top: 6px; font-size: .9em; opacity: 
   line-height: 1; letter-spacing: -.005em;
   font-variant-numeric: tabular-nums;
   cursor: default;
+  position: relative;
+  transform: translate(var(--wx, 0px), var(--wy, 0px)) scale(var(--ws, 1));
+  transition: transform 10s cubic-bezier(.65, 0, .35, 1);
 }
 .row { display: flex; }
 .d { position: relative; display: block; height: .9em; }
@@ -161,6 +201,10 @@ header .date small { display: block; margin-top: 6px; font-size: .9em; opacity: 
 }
 #hh { color: var(--ink); }
 #mm { color: var(--minute); }
+/* soft contrast: dimmer, slightly lighter digits = less charge build-up on the panel */
+body.soft .clock { font-weight: 700; }
+body.soft #hh { color: color-mix(in oklab, var(--ink) 74%, var(--bg)); }
+body.soft #mm { color: color-mix(in oklab, var(--minute) 80%, var(--bg)); }
 .sep { display: flex; align-items: center; gap: .6em; height: .14em; font-size: 1rem; }
 .sep i { display: block; width: clamp(18px, 6vw, 40px); height: 1px; background: var(--faint); }
 .sep b { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: beat 1s steps(1) infinite; }
@@ -295,6 +339,9 @@ input::placeholder { color: var(--mute); }
 .seg button { padding: 7px 10px; border-radius: 9px; font-size: 11px; letter-spacing: .06em; color: var(--mute); }
 .seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
 .setting input[type="text"] { width: 160px; flex: none; }
+.range { display: flex; align-items: center; gap: 8px; color: var(--mute); flex: none; }
+.range input[type="time"] { font: 500 13px var(--mono); letter-spacing: 0; padding: 8px 10px; }
+.setting.sub { padding-top: 0; }
 .keys { margin-top: 20px; font-size: 11px; color: var(--mute); line-height: 2; }
 kbd { font: inherit; padding: 1px 6px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); }
 
@@ -331,7 +378,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   .sep { flex-direction: column; height: auto; width: .24em; gap: .5em; }
   .sep i { width: 1px; height: clamp(18px, 6vh, 40px); }
   .sep b { width: 8px; height: 8px; }
-  .clock .meta { position: absolute; bottom: clamp(90px, 16vh, 150px); left: 0; right: 0; justify-content: center; }
+  .clock .meta { position: absolute; top: 100%; left: 0; right: 0; justify-content: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -383,7 +430,11 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
 </main>
 </div>
 <div class="sweep" id="sweep" aria-hidden="true"></div>
+<div class="rest-field" id="restField" aria-hidden="true"></div>
+<div class="rest-neg" id="restNeg" aria-hidden="true"></div>
+<div class="rest-cap" id="restCap" aria-hidden="true"><span>Pixel refresh</span><b id="restTime"></b><em id="restLeft"></em></div>
 <div class="dimmer" aria-hidden="true"></div>
+<div class="sleep" aria-hidden="true"></div>
 
 <div class="scrim" id="scrim"></div>
 <aside class="sheet" id="sheet" aria-label="Alarms and settings">
@@ -441,12 +492,24 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
         <div class="seg" data-seg="theme"><button data-v="dark">Dark</button><button data-v="light">Light</button><button data-v="system">System</button></div>
       </div>
       <div class="label">Screen care</div>
-      <div class="setting"><div>Pixel orbit<small>The whole layout drifts slowly in a loop of about ±16px, too slow to notice, so no pixel shows the same thing for long</small></div><button class="switch" role="switch" data-set="orbit"></button></div>
-      <div class="setting"><div>Hourly pixel refresh<small>At the top of each hour a soft inverting band sweeps across the screen to clear image retention</small></div><div style="display:flex;gap:8px;align-items:center"><button class="btn" id="sweepNow" style="padding:7px 10px">Run</button><button class="switch" role="switch" data-set="sweep"></button></div></div>
-      <div class="setting"><div>Dim at night<small>Lowers brightness from 22:00 to 07:00</small></div><button class="switch" role="switch" data-set="dim"></button></div>
+      <div class="setting"><div>Wander<small>Every 12 minutes the clock glides to a new spot and size, so even the insides of the thick digits land on fresh pixels</small></div><button class="switch" role="switch" data-set="wander"></button></div>
+      <div class="setting"><div>Pixel orbit<small>The whole screen drifts in a slow ±16px loop, one pixel at a time — too slow to notice</small></div><button class="switch" role="switch" data-set="orbit"></button></div>
+      <div class="setting"><div>Soft contrast<small>Slightly dimmer, lighter digits. Less brightness held on the same pixels means less retention</small></div><button class="switch" role="switch" data-set="soft"></button></div>
+      <div class="setting">
+        <div>Pixel refresh<small>A 45-second colour cycle — negative, white, red, green, blue, spectrum — that clears image retention. Click to skip</small></div>
+        <div style="display:grid;gap:6px;justify-items:end">
+          <div class="seg" data-seg="refresh"><button data-v="0">Off</button><button data-v="30">30m</button><button data-v="60">1h</button><button data-v="120">2h</button></div>
+          <button class="btn" id="restNow" style="padding:7px 12px">Run now</button>
+        </div>
+      </div>
+      <div class="setting" style="border-bottom:0">
+        <div>After hours<small>Dim lowers brightness. Sleep turns the screen fully black and lets it power off; move the mouse to peek. Alarms still ring</small></div>
+        <div class="seg" data-seg="night"><button data-v="off">Off</button><button data-v="dim">Dim</button><button data-v="sleep">Sleep</button></div>
+      </div>
+      <div class="setting sub"><div></div><div class="range"><input type="time" id="nightFrom" aria-label="After hours start"> to <input type="time" id="nightTo" aria-label="After hours end"></div></div>
       <div class="label">Display</div>
       <div class="setting"><div>Keep screen awake<small>Stops the display from sleeping while this tab is visible</small></div><button class="switch" role="switch" data-set="awake"></button></div>
-      <div class="setting"><div>Place name<small>Shown at the top-left</small></div><input type="text" id="placeInput" maxlength="32"></div>
+      <div class="setting"><div>Place name<small id="tzInfo">Shown at the top-left</small></div><input type="text" id="placeInput" maxlength="32"></div>
       <div class="keys">
         <kbd>F</kbd> fullscreen &nbsp; <kbd>A</kbd> alarms &nbsp; <kbd>S</kbd> settings &nbsp; <kbd>Esc</kbd> close<br>
         The colour of the minutes and the tide follows the sun through your day. The tide rises from midnight to midnight.
@@ -483,15 +546,22 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     get(k, d) { try { const v = localStorage.getItem('wtii.' + k); return v ? JSON.parse(v) : d; } catch { return d; } },
     set(k, v) { try { localStorage.setItem('wtii.' + k, JSON.stringify(v)); } catch {} }
   };
-  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || '';
+  const detectTZ = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
+  let tz = detectTZ();
   const localeH24 = (() => {
     try { return !/h1[12]/.test(new Intl.DateTimeFormat(undefined, { hour: 'numeric' }).resolvedOptions().hourCycle || ''); }
     catch { return true; }
   })();
+  const rawSettings = store.get('settings', {});
   const settings = Object.assign(
-    { h24: localeH24, seconds: true, chime: 0, theme: 'dark', awake: false, place: '', orbit: true, sweep: true, dim: true },
-    store.get('settings', {})
+    { h24: localeH24, seconds: true, chime: 0, theme: 'dark', awake: false, place: '',
+      orbit: true, wander: true, soft: true, refresh: 60, night: 'dim', nightFrom: '22:00', nightTo: '07:00' },
+    rawSettings
   );
+  // settings from the first screen-care version
+  if ('dim' in rawSettings && !('night' in rawSettings)) settings.night = rawSettings.dim ? 'dim' : 'off';
+  if ('sweep' in rawSettings && !('refresh' in rawSettings)) settings.refresh = rawSettings.sweep ? 60 : 0;
+  delete settings.dim; delete settings.sweep;
   let alarms = store.get('alarms', []);   // {id, time:'HH:MM', label, days:[0-6], sound, enabled}
   let timers = store.get('timers', []);   // {id, at:ms, label, sound, kind}
   const save = () => { store.set('settings', settings); store.set('alarms', alarms); store.set('timers', timers); };
@@ -525,6 +595,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     document.documentElement.dataset.theme = t;
     $('meta[name="theme-color"]').content = t === 'light' ? '#eeebe4' : '#0a0a0c';
     document.body.classList.toggle('no-seconds', !settings.seconds);
+    document.body.classList.toggle('soft', !!settings.soft);
   }
   sysDark.addEventListener?.('change', applyTheme);
 
@@ -582,9 +653,22 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   }
   function zoneText(now) {
     const off = -now.getTimezoneOffset(), sign = off >= 0 ? '+' : '−', a = Math.abs(off);
-    return `UTC${sign}${Math.floor(a / 60)}${a % 60 ? ':' + pad(a % 60) : ''}`;
+    const utc = `UTC${sign}${Math.floor(a / 60)}${a % 60 ? ':' + pad(a % 60) : ''}`;
+    let abbr = '';
+    try { abbr = zoneFmt.formatToParts(now).find(p => p.type === 'timeZoneName')?.value || ''; } catch {}
+    return abbr && !/^(GMT|UTC)/.test(abbr) ? `${abbr} · ${utc}` : utc;
   }
-  const dateFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+  let dateFmt, zoneFmt;
+  function makeFormatters() {
+    dateFmt = new Intl.DateTimeFormat(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+    zoneFmt = new Intl.DateTimeFormat(undefined, { timeZoneName: 'short' });
+  }
+  makeFormatters();
+  // The system time zone can change while the page is open (travel, OS setting).
+  function checkTZ() {
+    const t = detectTZ();
+    if (t !== tz) { tz = t; makeFormatters(); syncSettingsUI(); updateNext(); }
+  }
 
   /* ---------- render ---------- */
   let first = true;
@@ -645,7 +729,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     const secFrac = (now.getSeconds() + now.getMilliseconds() / 1000) / 60;
     $('#secfill').style.transform = `scaleY(${secFrac})`;
     orbit();
-    if (ts - lastFrame < 33) return; // ~30fps is plenty for water
+    if (sleeping || ts - lastFrame < 33) return; // ~30fps is plenty for water
     lastFrame = ts;
 
     const dayFrac = (now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds() + now.getMilliseconds() / 1000) / 86400;
@@ -812,6 +896,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   let ringLoop = null, ringStop = null, titleLoop = null, current = null;
   function ring(a) {
     current = a;
+    endRest();
     const now = new Date(), ringEl = $('#ring');
     ringEl.dataset.on = '1';
     $('#ringKind').textContent = a.kind || 'Alarm';
@@ -947,26 +1032,34 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
       b.setAttribute('aria-pressed', String(settings[seg.dataset.seg]) === b.dataset.v)));
     $('#placeInput').value = settings.place;
     $('#placeInput').placeholder = tz.split('/').pop()?.replace(/_/g, ' ') || 'Local time';
+    $('#tzInfo').textContent = `Time zone is detected from your system${tz ? ' (' + tz.replace(/_/g, ' ') + ')' : ''}. Leave blank to use its city`;
+    $('#nightFrom').value = settings.nightFrom;
+    $('#nightTo').value = settings.nightTo;
   }
   $$('[data-set]').forEach(b => b.onclick = () => {
     const k = b.dataset.set; settings[k] = !settings[k];
     save(); syncSettingsUI(); applyTheme(); render(new Date()); renderList(); updateNext();
     if (k === 'awake') applyWake();
-    if (k === 'dim') applyDim(new Date());
+    if (k === 'wander') applyWander();
   });
   $$('[data-seg]').forEach(seg => $$('button', seg).forEach(b => b.onclick = () => {
     const k = seg.dataset.seg;
-    settings[k] = k === 'chime' ? +b.dataset.v : b.dataset.v;
+    settings[k] = k === 'chime' || k === 'refresh' ? +b.dataset.v : b.dataset.v;
+    if (k === 'night') { peekUntil = 0; applyNight(new Date()); }
     if (k === 'chime' && settings.chime) { audio(); play('chime'); }
     save(); syncSettingsUI(); applyTheme(); updateNext();
   }));
+  ['nightFrom', 'nightTo'].forEach(id => $('#' + id).onchange = e => {
+    if (!e.target.value) return;
+    settings[id] = e.target.value; save(); applyNight(new Date());
+  });
   $('#placeInput').oninput = e => { settings.place = e.target.value.trim(); save(); render(new Date()); };
 
   /* ---------- wake lock ---------- */
   let wake = null;
   async function applyWake() {
     try {
-      if (settings.awake && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      if (settings.awake && !sleeping && 'wakeLock' in navigator && document.visibilityState === 'visible') {
         if (!wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release', () => { wake = null; }); }
       } else if (wake) { await wake.release(); wake = null; }
     } catch {}
@@ -991,6 +1084,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   ['mousemove', 'pointerdown', 'keydown'].forEach(e => addEventListener(e, wakeUI, { passive: true }));
 
   addEventListener('keydown', e => {
+    if (resting) { e.preventDefault(); endRest(); return; }
     if (e.target.matches('input, select, textarea') || e.metaKey || e.ctrlKey || e.altKey) return;
     const ringing = document.body.classList.contains('ringing');
     if (ringing) {
@@ -1024,11 +1118,120 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     el.classList.remove('go'); void el.offsetWidth; el.classList.add('go');
   }
   $('#sweep').addEventListener('animationend', e => e.target.classList.remove('go'));
-  $('#sweepNow').onclick = () => { closeSheet(); setTimeout(sweep, 700); };
-  function applyDim(now) {
-    const h = now.getHours();
-    document.body.classList.toggle('dim', settings.dim && (h >= 22 || h < 7));
+
+  // Wander: glide the clock to a new position and size inside the free space.
+  const clockEl = $('#clock');
+  let wanderAt = { x: 0, y: 0 };
+  function applyWander() {
+    if (!settings.wander) {
+      wanderAt = { x: 0, y: 0 };
+      ['--wx', '--wy', '--ws'].forEach(v => clockEl.style.removeProperty(v));
+      return;
+    }
+    const stage = $('#stage'), cs = getComputedStyle(stage), meta = $('.meta', clockEl);
+    const rowTop = $('header').offsetTop + $('header').offsetHeight + 12;
+    const rowBot = $('footer').offsetTop - 12;
+    const extraBottom = getComputedStyle(meta).position === 'absolute' ? meta.offsetHeight + 28 : 0;
+    const cw = clockEl.offsetWidth, ch = clockEl.offsetHeight, top = clockEl.offsetTop, left = clockEl.offsetLeft;
+    let best = null;
+    for (let n = 0; n < 6; n++) {
+      const sc = .86 + Math.random() * .14;
+      const gx = (1 - sc) * cw / 2, gy = (1 - sc) * ch / 2;
+      const L = Math.max(0, left - parseFloat(cs.paddingLeft) + gx);
+      const R = Math.max(0, stage.clientWidth - parseFloat(cs.paddingRight) - (left + cw) + gx);
+      const U = Math.max(0, top - rowTop + gy);
+      const D = Math.max(0, rowBot - (top + ch) - extraBottom * sc + gy);
+      const c = { x: Math.round(-L + Math.random() * (L + R)), y: Math.round(-U + Math.random() * (U + D)), s: sc };
+      c.d = Math.hypot(c.x - wanderAt.x, c.y - wanderAt.y);
+      if (!best || c.d > best.d) best = c;   // prefer the spot farthest from the last one
+    }
+    wanderAt = best;
+    clockEl.style.setProperty('--wx', best.x + 'px');
+    clockEl.style.setProperty('--wy', best.y + 'px');
+    clockEl.style.setProperty('--ws', best.s.toFixed(3));
   }
+  let wanderResize;
+  addEventListener('resize', () => { clearTimeout(wanderResize); wanderResize = setTimeout(applyWander, 400); });
+
+  // Pixel refresh: negative → white → R → G → B → spectrum → black.
+  const PHASES = [
+    { neg: true, ms: 8000 },
+    { color: '#ffffff', ms: 6000 },
+    { color: '#ff1f3d', ms: 5000 },
+    { color: '#1fff6a', ms: 5000 },
+    { color: '#1f5bff', ms: 5000 },
+    { spectrum: true, color: '#ffffff', ms: 10000 },
+    { color: '#000000', ms: 4000 }
+  ];
+  const REST_MS = PHASES.reduce((t, p) => t + p.ms, 0);
+  let resting = false, restTimers = [], restTick = null;
+  function setPhase(p) {
+    const f = $('#restField');
+    $('#restNeg').style.opacity = p.neg ? 1 : 0;
+    f.style.opacity = p.color ? 1 : 0;
+    if (p.color) f.style.backgroundColor = p.color;
+    f.classList.toggle('spectrum', !!p.spectrum);
+  }
+  function startRest() {
+    if (resting || document.body.classList.contains('ringing')) return;
+    resting = true;
+    closeSheet();
+    document.body.classList.add('resting');
+    sweep();
+    const end = Date.now() + 900 + REST_MS;
+    const cap = () => {
+      const now = new Date();
+      $('#restTime').textContent = fmtHM(now.getHours(), now.getMinutes()).replace(/ (AM|PM)$/, '');
+      $('#restLeft').textContent = `${Math.max(0, Math.ceil((end - Date.now()) / 1000))}s · click to skip`;
+    };
+    cap(); restTick = setInterval(cap, 250);
+    let t = 900;
+    PHASES.forEach(p => { restTimers.push(setTimeout(() => setPhase(p), t)); t += p.ms; });
+    restTimers.push(setTimeout(endRest, t));
+  }
+  function endRest() {
+    if (!resting) return;
+    resting = false;
+    restTimers.forEach(clearTimeout); restTimers = [];
+    clearInterval(restTick);
+    setPhase({});
+    document.body.classList.remove('resting');
+  }
+  addEventListener('pointerdown', () => { if (resting) endRest(); }, true);
+  $('#restNow').onclick = () => { closeSheet(); setTimeout(startRest, 700); };
+  function maybeRest(now) {
+    const every = settings.refresh;
+    if (!every || sleeping || document.visibilityState !== 'visible') return;
+    if ((now.getHours() * 60 + now.getMinutes()) % every) return;
+    const n = nextAlarm(+now);
+    if (n && n.at - now < REST_MS + 60000) return;   // never cover an alarm that is about to ring
+    startRest();
+  }
+
+  // After hours: dim or sleep (true black) between two times. Mouse movement peeks for a minute.
+  let sleeping = false, peekUntil = 0;
+  const toMin = t => { const [h, m] = t.split(':').map(Number); return h * 60 + m; };
+  function inNight(now) {
+    const m = now.getHours() * 60 + now.getMinutes(), a = toMin(settings.nightFrom), b = toMin(settings.nightTo);
+    if (a === b) return false;
+    return a < b ? m >= a && m < b : m >= a || m < b;
+  }
+  function applyNight(now) {
+    const on = settings.night !== 'off' && inNight(now);
+    document.body.classList.toggle('dim', on && settings.night === 'dim');
+    const sleepNow = on && settings.night === 'sleep' && Date.now() > peekUntil;
+    if (sleepNow !== sleeping) {
+      sleeping = sleepNow;
+      document.body.classList.toggle('sleeping', sleeping);
+      if (sleeping) endRest();
+      applyWake();
+    }
+  }
+  ['pointermove', 'pointerdown', 'keydown'].forEach(e => addEventListener(e, () => {
+    if (!sleeping) return;
+    peekUntil = Date.now() + 60000;
+    applyNight(new Date());
+  }, { passive: true }));
 
   /* ---------- main loop ---------- */
   let lastMinute = -1;
@@ -1039,9 +1242,11 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     if (mk !== lastMinute) {
       if (lastMinute !== -1) {
         swell = Math.max(swell, now.getMinutes() === 0 ? .9 : .35);
-        if (settings.sweep && now.getMinutes() === 0 && !document.body.classList.contains('ringing')) sweep();
+        if (mk % 12 === 0) applyWander();
+        maybeRest(now);
       }
-      applyDim(now);
+      checkTZ();
+      applyNight(now);
       lastMinute = mk;
       applyAccent(now);
       updateNext(now);
@@ -1056,6 +1261,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   tick();
   setInterval(tick, 250);
   requestAnimationFrame(frame);
+  (document.fonts?.ready || Promise.resolve()).then(() => setTimeout(applyWander, 1200));
   requestAnimationFrame(() => setTimeout(() => document.body.classList.remove('intro'), 60));
   wakeUI();
   applyWake();

@@ -14,11 +14,13 @@ A single-file, minimalist clock for a secondary monitor — designed for a tall,
 - **Chime.** An optional soft bell every 15 min, 30 min or hour, with a glow around the screen edge.
 - **When an alarm rings** you get a full-screen alert with a looping sound, a browser notification and a flashing tab title. You can snooze for 5 minutes or dismiss it.
 - **Quiet UI.** The buttons and cursor fade out after a few seconds without mouse movement.
-- **Screen care (safe to leave on all day).** Each of these can be switched off in Settings:
-  - *Pixel orbit:* the whole layout drifts in a slow loop of about ±16px (7- and 11-minute cycles), one pixel at a time, so nothing stays on the same pixels.
-  - *Hourly pixel refresh:* at the top of each hour, an inverting band sweeps across the screen to clear image retention. You can also run it any time from Settings.
-  - *Dim at night:* brightness fades down between 22:00 and 07:00.
-  - Colours are off-white and softly tinted, never pure white on black. The minutes and the tide change colour through the day.
+- **Screen care, built for old LCDs left on all day.** Every option below is in Settings:
+  - *Wander:* every 12 minutes the clock glides (over 10 s) to a new spot and a slightly different size. Even the centres of the thick digits land on fresh pixels, which small drifts alone can't do.
+  - *Pixel orbit:* the whole screen also drifts in a slow ±16px loop, one pixel at a time.
+  - *Soft contrast:* the digits are slightly dimmer and thinner, so the same pixels hold less brightness.
+  - *Pixel refresh* (every 30 min, 1 h or 2 h, or on demand): a 45-second colour cycle. It shows a negative of the screen, then white, red, green and blue, then a spinning spectrum. A wipe opens it, and a small caption with the time floats across it. Any click or key skips it. It never starts right before an alarm.
+  - *After hours:* between two times you choose (default 22:00–07:00), either **Dim** the screen or **Sleep** it. Sleep turns the screen fully black and releases "keep awake" so the OS can power the display off. Move the mouse to peek for a minute. Alarms still ring.
+- **Time zone** comes from your system automatically. If you change it (for example, when travelling), the clock picks it up within a minute without a reload.
 - **Settings.** 12/24-hour time, show or hide seconds, dark/light/system theme, keep the screen awake, and a custom place name.
 
 Keys: `F` fullscreen (or double-click the time) · `A` alarms · `S` settings · `Esc` close · when ringing: `Enter` dismiss, `Z` snooze.
