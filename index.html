@@ -6,7 +6,9 @@
 <title>What Time Is It</title>
 <meta name="description" content="A quiet, beautiful clock for your second screen — with alarms and chimes.">
 <meta name="theme-color" content="#0a0a0c">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%230a0a0c'/%3E%3Crect x='10' y='38' width='44' height='16' rx='3' fill='%237ee0c3' opacity='.55'/%3E%3Ccircle cx='32' cy='26' r='5' fill='%23ece8e1'/%3E%3C/svg%3E">
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -147,6 +149,19 @@ body.resting .rest-cap { opacity: 1; animation: float 44s ease-in-out both; }
   50%  { transform: translate(-50%, -50%) translate(12vw, 20vh); }
   75%  { transform: translate(-50%, -50%) translate(-10vw, 30vh); }
   100% { transform: translate(-50%, -50%) translate(8vw, -18vh); }
+}
+
+/* ---------- installed app: draw into the title bar ---------- */
+/* With "window controls overlay" the OS title bar disappears; this strip keeps the window draggable. */
+.titlebar { display: none; }
+@media (display-mode: window-controls-overlay) {
+  .titlebar {
+    display: block; position: fixed; z-index: 5;
+    left: env(titlebar-area-x, 0); top: env(titlebar-area-y, 0);
+    width: env(titlebar-area-width, 100%); height: env(titlebar-area-height, 32px);
+    -webkit-app-region: drag; app-region: drag;
+  }
+  #stage { padding-top: calc(env(titlebar-area-height, 32px) + clamp(12px, 3vh, 28px)); }
 }
 
 /* ---------- stage ---------- */
@@ -390,6 +405,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
 </head>
 <body class="intro">
 
+<div class="titlebar" aria-hidden="true"></div>
 <canvas id="tide" aria-hidden="true"></canvas>
 <div class="grain" aria-hidden="true"></div>
 <div class="vignette" aria-hidden="true"></div>
@@ -508,6 +524,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
       </div>
       <div class="setting sub"><div></div><div class="range"><input type="time" id="nightFrom" aria-label="After hours start"> to <input type="time" id="nightTo" aria-label="After hours end"></div></div>
       <div class="label">Display</div>
+      <div class="setting" id="installRow"><div>Install as app<small id="installInfo">Removes the tabs and address bar. Once installed, click the ⌃ arrow in its title bar to hide that as well, so the clock fills the whole window</small></div><button class="btn primary" id="installBtn" hidden>Install</button></div>
       <div class="setting"><div>Keep screen awake<small>Stops the display from sleeping while this tab is visible</small></div><button class="switch" role="switch" data-set="awake"></button></div>
       <div class="setting"><div>Place name<small id="tzInfo">Shown at the top-left</small></div><input type="text" id="placeInput" maxlength="32"></div>
       <div class="keys">
@@ -583,9 +600,31 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     const e = t * t * (3 - 2 * t);
     return a.map((v, k) => Math.round(v + (b[k] - v) * e));
   }
+  // Browser/app title bar colour (theme-color). It shifts with the day, joins the pixel refresh
+  // and goes black in sleep, so the bar's pixels never sit on one colour for hours.
+  const themeMeta = $('meta[name="theme-color"]');
+  const toHex = rgb => '#' + rgb.map(v => Math.round(v).toString(16).padStart(2, '0')).join('');
+  function updateChrome(override) {
+    let c = override;
+    if (!c) {
+      if (typeof sleeping !== 'undefined' && sleeping) c = '#000000';
+      else {
+        const light = document.documentElement.dataset.theme === 'light';
+        const base = hex(light ? '#eeebe4' : '#0a0a0c'), k = light ? .18 : .16;
+        c = toHex(base.map((v, i) => v + (accentRGB[i] - v) * k));
+      }
+    }
+    if (themeMeta.content !== c) themeMeta.content = c;
+  }
+  function updateTitle(now = new Date()) {
+    if (document.body.classList.contains('ringing')) return;
+    document.title = `${fmtHM(now.getHours(), now.getMinutes())} · ${placeName()}`;
+  }
+
   function applyAccent(now) {
     accentRGB = accentAt(now.getHours() + now.getMinutes() / 60);
     document.documentElement.style.setProperty('--accent', `rgb(${accentRGB.join(',')})`);
+    if (!document.body.classList.contains('resting')) updateChrome();
   }
 
   /* ---------- theme ---------- */
@@ -593,7 +632,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   function applyTheme() {
     const t = settings.theme === 'system' ? (sysDark.matches ? 'dark' : 'light') : settings.theme;
     document.documentElement.dataset.theme = t;
-    $('meta[name="theme-color"]').content = t === 'light' ? '#eeebe4' : '#0a0a0c';
+    updateChrome();
     document.body.classList.toggle('no-seconds', !settings.seconds);
     document.body.classList.toggle('soft', !!settings.soft);
   }
@@ -920,8 +959,8 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
   }
   function stopRing() {
     clearInterval(ringLoop); clearTimeout(ringStop); clearInterval(titleLoop);
-    document.title = 'What Time Is It';
     document.body.classList.remove('ringing');
+    updateTitle();
     delete $('#ring').dataset.on;
     updateNext();
   }
@@ -1171,7 +1210,14 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     f.style.opacity = p.color ? 1 : 0;
     if (p.color) f.style.backgroundColor = p.color;
     f.classList.toggle('spectrum', !!p.spectrum);
+    if (!resting) updateChrome();
+    else if (p.neg) updateChrome('#f4f2ee');
+    else if (p.spectrum) { let h = 0; clearInterval(specTimer); specTimer = setInterval(() => { h = (h + 12) % 360; updateChrome(hsl(h)); }, 300); }
+    if (!p.spectrum) clearInterval(specTimer);
+    if (p.color && !p.spectrum) updateChrome(p.color);
   }
+  let specTimer = null;
+  const hsl = h => { const f = n => { const k = (n + h / 30) % 12, a = .9 * Math.min(.5, 1 - .5); return Math.round(255 * (.5 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)))); }; return toHex([f(0), f(8), f(4)]); };
   function startRest() {
     if (resting || document.body.classList.contains('ringing')) return;
     resting = true;
@@ -1223,6 +1269,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     if (sleepNow !== sleeping) {
       sleeping = sleepNow;
       document.body.classList.toggle('sleeping', sleeping);
+      updateChrome();
       if (sleeping) endRest();
       applyWake();
     }
@@ -1232,6 +1279,22 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
     peekUntil = Date.now() + 60000;
     applyNight(new Date());
   }, { passive: true }));
+
+  /* ---------- install as app + offline ---------- */
+  let installEvt = null;
+  const standalone = () => matchMedia('(display-mode: standalone), (display-mode: window-controls-overlay)').matches;
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; $('#installBtn').hidden = false; });
+  addEventListener('appinstalled', () => { installEvt = null; $('#installBtn').hidden = true; $('#installInfo').textContent = 'Installed. Open it from your apps or Start menu.'; });
+  $('#installBtn').onclick = async () => {
+    if (!installEvt) return;
+    installEvt.prompt();
+    try { await installEvt.userChoice; } catch {}
+    installEvt = null; $('#installBtn').hidden = true;
+  };
+  if (standalone()) $('#installInfo').textContent = 'Running as an app. Click the ⌃ arrow in the title bar to hide the title bar too.';
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
+    addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  }
 
   /* ---------- main loop ---------- */
   let lastMinute = -1;
@@ -1246,6 +1309,7 @@ body.ringing .ring .waves i { animation: ripple 3.6s cubic-bezier(.2, .6, .3, 1)
         maybeRest(now);
       }
       checkTZ();
+      updateTitle(now);
       applyNight(now);
       lastMinute = mk;
       applyAccent(now);

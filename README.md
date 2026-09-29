@@ -25,8 +25,18 @@ A single-file, minimalist clock for a secondary monitor — designed for a tall,
 
 Keys: `F` fullscreen (or double-click the time) · `A` alarms · `S` settings · `Esc` close · when ringing: `Enter` dismiss, `Z` snooze.
 
+## Hide the browser UI (so it can't burn in either)
+The page can't paint over the browser's own tabs, address bar or title bar, so run it as an app instead:
+
+1. Open the live page in Chrome or Edge, then click **Install** in Settings → Display, or the install icon in the address bar.
+2. The clock opens in its own window, with no tabs or address bar.
+3. Click the **⌃** arrow in that window's title bar. The title bar is hidden and the clock draws edge to edge. Only the small minimize/maximize/close buttons remain, and you can still drag the window by its top edge.
+
+The title bar colour (while it's visible) follows the time of day. It goes black in Sleep mode and cycles colours during Pixel refresh. The window title shows the current time, so even that text changes every minute. The installed app also works offline.
+
+Outside the browser, set your OS taskbar to auto-hide, or keep it on the main monitor only.
+
 ## Notes
 - Browsers block sound until you interact with the page. After loading, click anywhere once. A small "Click to arm alarm sound" hint appears when this is needed.
 - Allow notifications when asked so alarms still reach you when the window is behind others.
 - Keep the tab open. Alarms, reminders and settings are saved in your browser (localStorage).
-- To run it without browser chrome, open it as an app window, e.g. `chrome --app=file:///path/to/index.html`, or enable GitHub Pages on this repo and use "Install app" / "Create shortcut".
