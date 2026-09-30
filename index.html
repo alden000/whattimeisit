@@ -536,7 +536,7 @@ body.ringing .ring { visibility: visible; transition: opacity .6s ease, visibili
       <div class="label">Display</div>
       <div class="setting" id="installRow"><div>Install as app<small id="installInfo">Removes the tabs and address bar. Once installed, click the ⌃ arrow in its title bar to hide that as well, so the clock fills the whole window</small></div><button class="btn primary" id="installBtn" hidden>Install</button></div>
       <div class="setting">
-        <div>Motion<small>How often the water and seconds line redraw. Eco uses the least GPU; nothing else changes</small></div>
+        <div>Motion<small>How often the water and seconds line redraw: Eco 8, Balanced 20, Smooth 60 times a second. Eco uses the least GPU</small></div>
         <div class="seg" data-seg="motion"><button data-v="eco">Eco</button><button data-v="balanced">Balanced</button><button data-v="smooth">Smooth</button></div>
       </div>
       <div class="setting"><div>Keep screen awake<small>Stops the display from sleeping while this tab is visible</small></div><button class="switch" role="switch" data-set="awake"></button></div>
@@ -795,9 +795,9 @@ body.ringing .ring { visibility: visible; transition: opacity .6s ease, visibili
   let loopTimer = null;
   function schedule() {
     clearTimeout(loopTimer);
+    // Always timer-paced, so high-refresh monitors (120/144 Hz) don't multiply the work.
     const fps = FPS[settings.motion] || 20;
-    if (fps >= 60) requestAnimationFrame(frame);
-    else loopTimer = setTimeout(() => requestAnimationFrame(frame), 1000 / fps);
+    loopTimer = setTimeout(() => requestAnimationFrame(frame), 1000 / fps);
   }
 
   function frame(ts) {
