@@ -36,6 +36,12 @@ The title bar colour (while it's visible) follows the time of day. It goes black
 
 Outside the browser, set your OS taskbar to auto-hide, or keep it on the main monitor only.
 
+## Light on your GPU
+- Only a thin strip around the water's surface is redrawn. The water below it and the background are static and painted once.
+- The water and the seconds line redraw at a fixed rate that you choose in **Settings → Display → Motion**: *Eco* (8 fps), *Balanced* (20 fps, the default) or *Smooth* (60 fps). Everything else only changes when the time does.
+- Overlays that aren't showing (alarm screen, settings panel, pixel refresh, dimmer) are fully removed from rendering, not just made transparent.
+- To keep the clock off a dedicated GPU on Windows, run it in a browser you don't otherwise use (for example Edge), then go to **Settings → System → Display → Graphics**, add that browser and choose **Power saving**. This needs your CPU's integrated graphics to be enabled. Alternatively, turn off **Use graphics acceleration when available** in that browser's settings; the clock is light enough to run without it.
+
 ## Notes
 - Browsers block sound until you interact with the page. After loading, click anywhere once. A small "Click to arm alarm sound" hint appears when this is needed.
 - Allow notifications when asked so alarms still reach you when the window is behind others.
