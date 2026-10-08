@@ -1,5 +1,5 @@
 // Offline support: the page is fetched fresh when online, and served from cache when not.
-const CACHE = 'wtii-v3';
+const CACHE = 'wtii-v4';
 const SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon.svg', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', e => {

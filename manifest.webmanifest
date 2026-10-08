@@ -2,7 +2,7 @@
   "name": "What Time Is It",
   "short_name": "Clock",
   "description": "A quiet, beautiful clock for your second screen — with alarms, chimes and screen care.",
-  "id": "./",
+  "id": "/whattimeisit/",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
